@@ -2,237 +2,176 @@
 
 var screenConstraints = { video: true, audio: true };
 var micConstraints = { audio: true };
+var cameraConstraints = { video: { facingMode: "user" }, audio: true };
 
-// Some UI elements
 var shareBtn = document.querySelector("button#shareScreen");
+var useCameraBtn = document.querySelector("button#useCamera");
 var recBtn = document.querySelector("button#rec");
+var recCameraBtn = document.querySelector("button#recCamera");
 var stopBtn = document.querySelector("button#stop");
-
-var videoElement = document.querySelector("video");
+var toggleThemeBtn = document.querySelector("button#toggleTheme");
+var timerElement = document.querySelector("#duration");
+var previewElement = document.querySelector("#preview");
+var cameraOverlay = document.querySelector("#cameraOverlay");
+var cameraPreviewElement = document.querySelector("#cameraPreview");
 var dataElement = document.querySelector("#data");
 var downloadLink = document.querySelector("a#downloadLink");
+var backgroundInput = document.querySelector("#backgroundInput");
 
-//Hide the UI on the video element
-videoElement.controls = false;
+previewElement.controls = false;
 
 var mediaRecorder;
+var cameraRecorder;
 var chunks = [];
-var count = 0;
 var localStream = null;
-var micNumber = 0;
+var cameraStream = null;
+var recordingInterval;
+var recordingTime = 0;
 
 function onShareScreen() {
-  if (!navigator.mediaDevices.getDisplayMedia) {
-    alert("navigator.mediaDevices.getDisplayMedia not supported on your browser, use the latest version of Chrome");
-  } else {
-    if (window.MediaRecorder == undefined) {
-      alert("MediaRecorder not supported on your browser, use the latest version of Firefox or Chrome");
-    } else {
-      navigator.mediaDevices.getDisplayMedia(screenConstraints).then(function(screenStream) {
-        //check if there's a microphone
-        navigator.mediaDevices.enumerateDevices().then(function(devices) {
-          devices.forEach(function(device) {
-            if (device.kind == "audioinput") {
-              micNumber++;
-            }
-          });
-
-          if (micNumber == 0) {
-            //no audio inputs present on device/pc
-            onCombinedStreamAvailable(screenStream);
-          } else {
-            //audio inputs present, let's get access
-            navigator.mediaDevices.getUserMedia(micConstraints).then(function(micStream) {
-
-              //create a new stream in which to pack everything together
-              var composedStream = new MediaStream();
-
-              //add the screen video stream
-              screenStream.getVideoTracks().forEach(function(videoTrack) {
-                composedStream.addTrack(videoTrack);
-              });
-
-              //if system audio has been shared
-              if (screenStream.getAudioTracks().length > 0) {
-                //merge the system audio with the mic audio
-                var context = new AudioContext();
-                var audioDestination = context.createMediaStreamDestination();
-
-                const systemSource = context.createMediaStreamSource(screenStream);
-                const systemGain = context.createGain();
-                systemGain.gain.value = 1.0;
-                systemSource.connect(systemGain).connect(audioDestination);
-                console.log("added system audio");
-
-                if (micStream && micStream.getAudioTracks().length > 0) {
-                  const micSource = context.createMediaStreamSource(micStream);
-                  const micGain = context.createGain();
-                  micGain.gain.value = 1.0;
-                  micSource.connect(micGain).connect(audioDestination);
-                  console.log(" added mic audio");
-                }
-
-                audioDestination.stream.getAudioTracks().forEach(function(audioTrack) {
-                  composedStream.addTrack(audioTrack);
-                });
-              } else {
-                //add just the mic audio
-                micStream.getAudioTracks().forEach(function(micTrack) {
-                  composedStream.addTrack(micTrack);
-                });
-              }
-
-              onCombinedStreamAvailable(composedStream);
-
-            })
-              .catch(function(err) {
-              log("navigator.getUserMedia error: " + err);
-            });
-          }
-        })
-          .catch(function(err) {
-          log(err.name + ": " + err.message);
-        });
-      })
-        .catch(function(err) {
-        log("navigator.getDisplayMedia error: " + err);
-      });
-    }
-  }
+  navigator.mediaDevices.getDisplayMedia(screenConstraints).then(function(screenStream) {
+    handleCombinedStream(screenStream);
+  }).catch(function(err) {
+    log("navigator.getDisplayMedia error: " + err);
+  });
 }
 
-function onCombinedStreamAvailable(stream) {
-  localStream = stream;
-  localStream.getTracks().forEach(function(track) {
-    if (track.kind == "audio") {
-      track.onended = function(event) {
-        log("audio track.onended Audio track.readyState=" + track.readyState + ", track.muted=" + track.muted);
-      };
-    }
-    if (track.kind == "video") {
-      track.onended = function(event) {
-        log("video track.onended Audio track.readyState=" + track.readyState + ", track.muted=" + track.muted);
-      };
-    }
-  });
+function handleCombinedStream(screenStream) {
+  localStream = new MediaStream();
+  screenStream.getVideoTracks().forEach(track => localStream.addTrack(track));
+  screenStream.getAudioTracks().forEach(track => localStream.addTrack(track));
 
-  videoElement.srcObject = localStream;
-  videoElement.play();
-  videoElement.muted = true;
+  previewElement.srcObject = localStream;
+  previewElement.play();
   recBtn.disabled = false;
   shareBtn.disabled = true;
+  useCameraBtn.disabled = false;
+}
 
-  try {
-    window.AudioContext = window.AudioContext || window.webkitAudioContext;
-    window.audioContext = new AudioContext();
-  } catch (e) {
-    log("Web Audio API not supported.");
+function onUseCamera() {
+  navigator.mediaDevices.getUserMedia(cameraConstraints).then(function(stream) {
+    cameraStream = stream;
+    cameraPreviewElement.srcObject = cameraStream;
+    cameraPreviewElement.play();
+    cameraOverlay.classList.remove("hidden");
+    recCameraBtn.disabled = false;
+  }).catch(function(err) {
+    log("Error accessing camera: " + err);
+  });
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraOverlay.classList.add("hidden");
+    recCameraBtn.disabled = true;
+    useCameraBtn.disabled = false;
+    cameraStream = null;
+    log("Camera stopped.");
   }
 }
 
 function onBtnRecordClicked() {
   if (localStream == null) {
     alert("Could not get local stream from mic/camera");
-  } else {
-    recBtn.enabled = true;
-    stopBtn.enabled = false;
-
-    /* use the stream */
-    log("Start recording...");
-    if (typeof MediaRecorder.isTypeSupported == "function") {
-      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
-        var options = { mimeType: "video/webm;codecs=vp9" };
-      } else if (MediaRecorder.isTypeSupported("video/webm;codecs=h264")) {
-        var options = { mimeType: "video/webm;codecs=h264" };
-      } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) {
-        var options = { mimeType: "video/webm;codecs=vp8" };
-      }
-      log("Using " + options.mimeType);
-      mediaRecorder = new MediaRecorder(localStream, options);
-    } else {
-      log("isTypeSupported is not supported, using default codecs for browser");
-      mediaRecorder = new MediaRecorder(localStream);
-    }
-
-    mediaRecorder.ondataavailable = function(e) {
-      chunks.push(e.data);
-    };
-
-    mediaRecorder.onerror = function(e) {
-      log("mediaRecorder.onerror: " + e);
-    };
-
-    mediaRecorder.onstart = function() {
-      log("mediaRecorder.onstart, mediaRecorder.state = " + mediaRecorder.state);
-
-      localStream.getTracks().forEach(function(track) {
-        if (track.kind == "audio") {
-          log("onstart - Audio track.readyState=" + track.readyState + ", track.muted=" + track.muted);
-        }
-        if (track.kind == "video") {
-          log("onstart - Video track.readyState=" + track.readyState + ", track.muted=" + track.muted);
-        }
-      });
-    };
-
-    mediaRecorder.onstop = function() {
-      log("mediaRecorder.onstop, mediaRecorder.state = " + mediaRecorder.state);
-
-      var blob = new Blob(chunks, { type: "video/webm" });
-      chunks = [];
-
-      var videoURL = window.URL.createObjectURL(blob);
-
-      downloadLink.href = videoURL;
-      videoElement.src = videoURL;
-      downloadLink.innerHTML = "Download video file";
-
-      var rand = Math.floor(Math.random() * 10000000);
-      var name = "video_" + rand + ".webm";
-
-      downloadLink.setAttribute("download", name);
-      downloadLink.setAttribute("name", name);
-    };
-
-    mediaRecorder.onwarning = function(e) {
-      log("mediaRecorder.onwarning: " + e);
-    };
-
-    mediaRecorder.start(10);
-
-    localStream.getTracks().forEach(function(track) {
-      log(track.kind + ":" + JSON.stringify(track.getSettings()));
-      console.log(track.getSettings());
-    });
+    return;
   }
+
+  recBtn.disabled = true;
+  stopBtn.disabled = false;
+  recordingTime = 0;
+  timerElement.innerText = "00:00";
+  log("Start recording screen...");
+
+  mediaRecorder = new MediaRecorder(localStream, { mimeType: "video/webm; codecs=vp8" });
+
+  mediaRecorder.ondataavailable = function(e) {
+    chunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = function() {
+    clearInterval(recordingInterval);
+    finalizeRecording();
+  };
+
+  mediaRecorder.start(10);
+  startTimer();
+}
+
+function onBtnRecordCameraClicked() {
+  if (cameraStream == null) {
+    alert("Could not get camera stream.");
+    return;
+  }
+
+  recCameraBtn.disabled = true;
+  stopBtn.disabled = false;
+  recordingTime = 0;
+  timerElement.innerText = "00:00";
+  log("Start recording camera...");
+
+  cameraRecorder = new MediaRecorder(cameraStream, { mimeType: "video/webm; codecs=vp8" });
+
+  cameraRecorder.ondataavailable = function(e) {
+    chunks.push(e.data);
+  };
+
+  cameraRecorder.onstop = function() {
+    clearInterval(recordingInterval);
+    finalizeRecording();
+  };
+
+  cameraRecorder.start(10);
+  startTimer();
 }
 
 function onBtnStopClicked() {
-  mediaRecorder.stop();
-  videoElement.controls = true;
-  recBtn.disabled = false;
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+  }
+  if (cameraRecorder && cameraRecorder.state === "recording") {
+    cameraRecorder.stop();
+  }
   stopBtn.disabled = true;
 }
 
-function onStateClicked() {
-  if (mediaRecorder != null && localStream != null) {
-    log("mediaRecorder.state=" + mediaRecorder.state);
-    log("mediaRecorder.mimeType=" + mediaRecorder.mimeType);
-    log("mediaRecorder.videoBitsPerSecond=" + mediaRecorder.videoBitsPerSecond);
-    log("mediaRecorder.audioBitsPerSecond=" + mediaRecorder.audioBitsPerSecond);
+function finalizeRecording() {
+  var blob = new Blob(chunks, { type: "video/webm" });
+  chunks = [];
+  var videoURL = URL.createObjectURL(blob);
+  downloadLink.href = videoURL;
+  previewElement.src = videoURL;
+  downloadLink.innerHTML = "Download Video";
+  log("Recording stopped.");
+}
 
-    localStream.getTracks().forEach(function(track) {
-      if (track.kind == "audio") {
-        log("Audio: track.readyState=" + track.readyState + ", track.muted=" + track.muted);
-      }
-      if (track.kind == "video") {
-        log("Video: track.readyState=" + track.readyState + ", track.muted=" + track.muted);
-      }
-    });
+function startTimer() {
+  recordingInterval = setInterval(() => {
+    recordingTime++;
+    const minutes = String(Math.floor(recordingTime / 60)).padStart(2, '0');
+    const seconds = String(recordingTime % 60).padStart(2, '0');
+    timerElement.innerText = `${minutes}:${seconds}`;
+  }, 1000);
+}
+
+function toggleTheme() {
+  document.body.classList.toggle('dark');
+}
+
+function loadBackgroundImage(event) {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      cameraOverlay.style.backgroundImage = `url(${e.target.result})`;
+      cameraOverlay.style.backgroundSize = 'cover';
+      log("Background image set.");
+    };
+    reader.readAsDataURL(file);
   }
 }
 
 function log(message) {
-  dataElement.innerHTML = dataElement.innerHTML + "<br>" + message;
+  dataElement.innerHTML += "<br>" + message;
   console.log(message);
 }
