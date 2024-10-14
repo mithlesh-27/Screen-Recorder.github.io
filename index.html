@@ -2,54 +2,45 @@
 <html lang="en">
 
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, minimum-scale=1.0, user-scalable=yes">
-  <title>Screen & Camera Recorder</title>
-  <link href="style.css" rel="stylesheet" />
-  <script src="action.js" defer></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Screen & Camera Recorder</title>
+    <link href="style.css" rel="stylesheet" />
+    <script src="action.js" defer></script>
 </head>
 
 <body>
-  <div id="container">
-    <h1>Advanced Screen Recorder</h1>
-   
-    <h2>Record your screen and camera simultaneously!</h2>
-    
-    <video id="preview" controls autoplay></video>
-    <div id="cameraOverlay" class="hidden">
-      <video id="cameraPreview" autoplay></video>
-      <button id="stopCamera" onclick="stopCamera()">Stop Camera</button>
-      <input type="file" id="backgroundInput" accept="image/*" onchange="loadBackgroundImage(event)" />
+    <div id="container">
+        <h1>Screen & Camera Recorder</h1>
+        <p><small>Created by <b>Mithlesh Kushwaha</b></small></p>
+        <h2>Record your screen and camera simultaneously!</h2>
+
+        <div class="video-container">
+            <video id="preview" controls autoplay></video>
+            <div id="cameraOverlay" class="hidden">
+                <video id="cameraPreview" autoplay playsinline></video>
+                <button id="stopCamera" class="premium-btn" onclick="stopCamera()">Stop Camera</button>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="shareScreen" class="premium-btn" onclick="onShareScreen()">Share Screen</button>
+            <button id="useCamera" class="premium-btn" onclick="onUseCamera()">Use Camera</button>
+            <button id="rec" class="premium-btn" onclick="onBtnRecordClicked()" disabled>Record Screen</button>
+            <button id="recCamera" class="premium-btn" onclick="onBtnRecordCameraClicked()" disabled>Record Camera</button>
+            <button id="stop" class="premium-btn" onclick="onBtnStopClicked()" disabled>Stop</button>
+            <button id="reset" class="premium-btn" onclick="resetScreenShare()" disabled>Reset Share</button>
+            <button id="toggleTheme" class="premium-btn" onclick="toggleTheme()">Toggle Light/Dark</button>
+        </div>
+        
+        <div id="timer">Recording Duration: <span id="duration">00:00</span></div>
+        <a id="downloadLink" download="mediarecorder.webm" href="#">Download Video</a>
+        <p id="data"></p>
+
+        <footer>
+            <p>&copy; 2024 Mithlesh Kushwaha. All rights reserved.</p>
+        </footer>
     </div>
-    <div class="button-group">
-      <button id="shareScreen" onclick="onShareScreen()">Share Screen</button>
-      <button id="useCamera" onclick="onUseCamera()">Use Camera</button>
-      <button id="rec" onclick="onBtnRecordClicked()" disabled>Record Screen</button>
-      <button id="recCamera" onclick="onBtnRecordCameraClicked()" disabled>Record Camera</button>
-      <button id="stop" onclick="onBtnStopClicked()" disabled>Stop</button>
-      <button id="toggleTheme" onclick="toggleTheme()">Toggle Light/Dark</button>
-    </div>
-    <div id="timer">Recording Duration: <span id="duration">00:00</span></div><br/>
-    <a id="downloadLink" download="mediarecorder.webm" href="#">Download Video</a>
-    <p id="data"></p>
-    
-    <h2 style="color: maroon">Works on:</h2>
-    <ul>
-      <li>Chrome 74 and up (including system sounds)</li>
-      <li>Firefox 66 and up (no system sounds)</li>
-    </ul><br/>
-    <span style="color:red">Limitations:</span>
-    <br/><hr/>
-    <ul>
-      <li>On Chrome for macOS and Linux, it is only possible to share your audio when choosing to capture a Chrome tab.</li>
-      <li>Firefox does not yet capture system sounds.</li>
-    </ul>
-  </div>
-  
-  <footer>
-    <p><small>Made by <b>Mithlesh Kushwaha</b></small></p>
-    <p>&copy; 2024 . All rights reserved.</p>
-  </footer>
 </body>
 
 </html>
